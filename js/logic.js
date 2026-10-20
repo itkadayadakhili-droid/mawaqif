@@ -73,13 +73,13 @@
     L.matches = function (d, q) {
         if (!q) return true;
         q = q.trim().toLowerCase();
-        return [d.name, d.number, d.complaintNo, d.orderingAuthority, d.referredTo]
+        return [d.name, d.number, d.complaintNo, d.violation, d.workplace, d.orderingAuthority, d.referredTo]
             .some(function (x) { return String(x || '').toLowerCase().indexOf(q) !== -1; });
     };
 
     /* ---------- CSV (BOM ليفتحه Excel بالعربية صحيحاً) ---------- */
     L.toCsv = function (rows) {
-        var head = ['رقم التوقيف', 'الاسم', 'رقم الشكوى', 'تاريخ التوقيف', 'المدة المقترحة (يوم)', 'مجموع التمديد (يوم)',
+        var head = ['رقم التوقيف', 'الاسم', 'مكان العمل', 'المخالفة', 'رقم الشكوى', 'تاريخ التوقيف', 'المدة المقترحة (يوم)', 'مجموع التمديد (يوم)',
             'المدة الكلية (يوم)', 'الموعد المتوقع للإخلاء', 'الجهة الآمرة', 'الحالة', 'تاريخ الإخلاء', 'أُحيل إلى', 'تاريخ الإحالة'];
         function cell(v) {
             v = String(v == null ? '' : v);
@@ -88,7 +88,7 @@
         var lines = [head.map(cell).join(',')];
         rows.forEach(function (d) {
             var st = L.status(d);
-            lines.push([d.number, d.name, d.complaintNo, d.detentionDate, d.proposedDays, L.extraDays(d), st.total,
+            lines.push([d.number, d.name, d.workplace, d.violation, d.complaintNo, d.detentionDate, d.proposedDays, L.extraDays(d), st.total,
                 st.expectedRelease, d.orderingAuthority, st.label, d.releaseDate, d.referredTo, d.referralDate].map(cell).join(','));
         });
         return '﻿' + lines.join('\r\n');

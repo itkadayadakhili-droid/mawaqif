@@ -76,7 +76,9 @@
                 ((t === 'number' || f.numeric) ? ' inputmode="numeric"' : '') +
                 (f.min != null ? ` min="${f.min}"` : '') + (f.max != null ? ` max="${f.max}"` : '') +
                 (f.ltr ? ' dir="ltr" style="text-align:right"' : '') +
-                (f.placeholder ? ` placeholder="${h(f.placeholder)}"` : '') + ' autocomplete="off">';
+                (f.placeholder ? ` placeholder="${h(f.placeholder)}"` : '') +
+                (f.suggest ? ` list="${id}_list"` : '') + ' autocomplete="off">';
+            if (f.suggest) inp += `<datalist id="${id}_list">${f.suggest.map(o => `<option value="${h(o)}">`).join('')}</datalist>`;
         }
         return `<div class="field" data-f="${f.name}"><label for="${id}">${h(f.label)}${f.required ? ' <span class="req">*</span>' : ''}</label>` +
             inp + (f.hint ? `<div class="hint">${h(f.hint)}</div>` : '') + '<div class="errmsg" hidden></div></div>';
@@ -220,6 +222,7 @@
                 ${nav('#/', 'home', '<svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>', 'الرئيسية')}
                 ${nav('#/list', 'list', '<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17.5" rx="2"/><path d="M9 3.5h6v3H9z"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4"/></svg>', 'الموقوفون')}
                 ${nav('#/new', 'new', '+', 'إضافة', 'add')}
+                ${nav('#/reports', 'reports', '<svg viewBox="0 0 24 24"><path d="M6 3.5h9l3 3V21H6z"/><path d="M9 17v-3M12 17v-6M15 17v-4"/></svg>', 'التقارير')}
                 ${nav('#/backup', 'backup', '<svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 16v3.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>', 'النسخ والتصدير')}
             </nav>`;
         window.scrollTo(0, 0);
@@ -232,6 +235,7 @@
         return `<a class="item ${st.key}" href="#/d/${d.id}">
             <div class="row1"><span class="nm">${h(d.name)}</span><span class="badge ${st.key}">${h(st.label)}</span></div>
             <div class="sub">توقيف رقم ${num(d.number)}${d.complaintNo ? ' — الشكوى ' + num(d.complaintNo) : ''}</div>
+            ${d.violation || d.workplace ? `<div class="sub">${h([d.violation, d.workplace].filter(Boolean).join(' · '))}</div>` : ''}
             <div class="sub">منذ ${num(d.detentionDate)} · المدة المسموحة ${st.total} يوم${d.orderingAuthority ? ' · ' + h(d.orderingAuthority) : ''}</div>
             ${rem ? `<div class="rem ${remCls}">${h(rem)}</div>` : ''}
         </a>`;
@@ -315,12 +319,16 @@
     }
 
     /* ================= إضافة / تعديل ================= */
+    const VIOLATIONS = Object.values(window.VIOLATION_GROUPS || {}).flat();
     function detentionFields(isNew, d) {
         d = d || {};
         const f = [
             { name: 'number', label: 'رقم التوقيف', required: true, digits: true, ltr: true, value: d.number || '',
                 hint: 'اكتب رقم التوقيف كما هو في سجل القسم — مثال: 12/2026' },
             { name: 'name', label: 'الاسم الكامل للموقوف', required: true, value: d.name },
+            { name: 'workplace', label: 'مكان العمل', value: d.workplace, hint: 'القسم أو الفرع أو الإدارة التي يعمل فيها' },
+            { name: 'violation', label: 'المخالفة', value: d.violation, suggest: VIOLATIONS,
+                hint: 'اختر من القائمة الرسمية أو اكتب المخالفة' },
             { name: 'complaintNo', label: 'رقم الشكوى / الوارد', value: d.complaintNo, digits: true, ltr: true, hint: 'اختياري — مثال: 524/2025' },
             { name: 'detentionDate', label: 'تاريخ التوقيف', type: 'date', required: true, value: d.detentionDate || L.today(), max: L.today() },
             { name: 'proposedDays', label: 'المدة المقترحة (أيام)', type: 'number', required: true, min: 1, value: d.proposedDays },
@@ -364,7 +372,7 @@
                 if (dup && !(await confirmDialog('اسم مطابق لموقوف حالي',
                     `يوجد موقوف حالي بنفس الاسم (${h(dup.name)} — توقيف رقم ${num(dup.number)}). هل تريد المتابعة وتسجيل توقيف جديد؟`, 'متابعة'))) return;
                 const rec = {
-                    number: vals.number, name: vals.name, complaintNo: vals.complaintNo,
+                    number: vals.number, name: vals.name, workplace: vals.workplace, violation: vals.violation, complaintNo: vals.complaintNo,
                     detentionDate: vals.detentionDate, proposedDays: parseInt(vals.proposedDays, 10),
                     orderingAuthority: vals.orderingAuthority, healthIn: vals.healthIn, healthOut: '',
                     releaseDate: '', referredTo: '', referralDate: '', extensions: [], belongings: [],
@@ -376,14 +384,14 @@
                 toast('تم تسجيل الموقوف');
                 go('#/d/' + newId);
             } else {
-                const before = JSON.stringify([d.name, d.complaintNo, d.detentionDate, d.proposedDays, d.orderingAuthority, d.healthIn, d.healthOut]);
+                const before = JSON.stringify([d.name, d.workplace, d.violation, d.complaintNo, d.detentionDate, d.proposedDays, d.orderingAuthority, d.healthIn, d.healthOut]);
                 if (vals.number !== d.number) { logEv(d, `تعديل رقم التوقيف من ${d.number} إلى ${vals.number}`); d.number = vals.number; }
                 Object.assign(d, {
-                    name: vals.name, complaintNo: vals.complaintNo, detentionDate: vals.detentionDate,
+                    name: vals.name, workplace: vals.workplace, violation: vals.violation, complaintNo: vals.complaintNo, detentionDate: vals.detentionDate,
                     proposedDays: parseInt(vals.proposedDays, 10), orderingAuthority: vals.orderingAuthority,
                     healthIn: vals.healthIn, healthOut: vals.healthOut
                 });
-                const after = JSON.stringify([d.name, d.complaintNo, d.detentionDate, d.proposedDays, d.orderingAuthority, d.healthIn, d.healthOut]);
+                const after = JSON.stringify([d.name, d.workplace, d.violation, d.complaintNo, d.detentionDate, d.proposedDays, d.orderingAuthority, d.healthIn, d.healthOut]);
                 if (before !== after) logEv(d, 'تعديل بيانات التوقيف');
                 await Storage.put(d);
                 await reload();
@@ -415,7 +423,8 @@
         else if (st.near) alerts += `<div class="alertbox warn">⏰ ${st.remaining === 0 ? 'تنتهي المدة المسموحة اليوم' : 'تنتهي المدة المسموحة غداً'} (${num(st.expectedRelease)}).</div>`;
         if (!open && !d.isVoided && unreturned.length) alerts += `<div class="alertbox warn">لديه ${unreturned.length} من الممتلكات لم تُرجَع بعد.</div>`;
 
-        let facts = kv('رقم الشكوى', d.complaintNo ? num(d.complaintNo) : '-') +
+        let facts = kv('مكان العمل', h(d.workplace || '-')) + kv('المخالفة', h(d.violation || '-')) +
+            kv('رقم الشكوى', d.complaintNo ? num(d.complaintNo) : '-') +
             kv('تاريخ التوقيف', num(d.detentionDate)) +
             kv('المدة المقترحة الأصلية', st.total - L.extraDays(d) + ' يوم') +
             kv('مجموع التمديدات', L.extraDays(d) + ' يوم') +
@@ -710,7 +719,7 @@
                 <div><div class="k">وضع التخزين</div><div class="v">${Storage.mode === 'idb' ? 'IndexedDB (كامل)' : 'بديل (بدون مرفقات)'}</div></div>
                 <div><div class="k">آخر نسخة احتياطية</div><div class="v">${S.lastBackup ? h(fmtDateTime(S.lastBackup)) : 'لم تُؤخذ بعد'}</div></div></div>
                 <p class="sub" style="margin-top:10px">البيانات محفوظة على هذا الهاتف فقط. خذ نسخة احتياطية دورياً واحتفظ بها خارج الهاتف.</p>
-                ${persisted ? '<div class="alertbox info" style="margin:0">الحفظ الدائم مفعّل ✓</div>' : '<button class="btn ghost small" data-bk="persist">طلب حفظ دائم للبيانات</button>'}
+                ${persisted ? '<div class="alertbox info" style="margin:0">✓ التخزين محمي من الحذف التلقائي — لن يحذف الهاتف البيانات عند امتلاء ذاكرته</div>' : '<div class="alertbox warn" style="margin:0 0 8px">⚠ التخزين غير محمي من الحذف التلقائي — قد يحذف الهاتف البيانات إذا امتلأت ذاكرته. ثبّت التطبيق على الشاشة الرئيسية ثم اضغط الزر.</div><button class="btn ghost small" data-bk="persist">طلب حماية البيانات</button>'}
             </div>
             <div class="card"><h2>قفل التطبيق بالرمز السري</h2>
                 <p class="sub">${S.pin
@@ -977,6 +986,131 @@
         shell('<div class="card empty"><div class="big">❓</div><p>السجل غير موجود.</p><a class="btn" href="#/list">العودة للقائمة</a></div>', { back: true, nav: 'list' });
     }
 
+    /* ================= التقارير (صفحات A4 بنمط تقارير الإدارة، للطباعة أو الحفظ PDF) ================= */
+    const BRAND = window.APP_BRAND || { ministry: 'وزارة الداخلية', dept: '', logo: '' };
+    const REP_TABS = [
+        { k: 'current', t: 'الموقوفون الحاليون', title: 'قائمة الموقوفين الحاليين', dated: false,
+            f: st => L.isOpen(st) },
+        { k: 'referred', t: 'المحالون', title: 'قائمة الموقوفين المحالين إلى جهات أخرى', dated: true, dateKey: 'referralDate',
+            f: st => st.key === 'referred' },
+        { k: 'released', t: 'المخلى سبيلهم', title: 'قائمة الموقوفين المخلى سبيلهم', dated: true, dateKey: 'releaseDate',
+            f: st => st.key === 'released' }
+    ];
+    const AR_MONTHS = ['كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران', 'تموز', 'آب', 'أيلول', 'تشرين الأول', 'تشرين الثاني', 'كانون الأول'];
+    const fmtD = s => { if (!L.isValidDate(s)) return s || '-'; const p = s.split('-'); return `${+p[2]}/${+p[1]}/${p[0]}`; };
+    const monthLabel = s => { const p = (s || L.today()).split('-'); return `${AR_MONTHS[+p[1] - 1]} ${p[0]}`; };
+    const cnt = (n, one, many, acc) => { const r = n % 100; return r >= 3 && r <= 10 ? `${n} ${many}` : r >= 11 && r <= 99 ? `${n} ${acc || one}` : `${n} ${one}`; };
+
+    function reportRows(tab, from, to) {
+        const T = REP_TABS.find(t => t.k === tab);
+        let rows = S.all.filter(d => !d.isVoided).map(d => ({ d, st: L.status(d) })).filter(x => T.f(x.st));
+        if (T.dated) rows = rows.filter(x => { const v = x.d[T.dateKey] || ''; return (!from || v >= from) && (!to || v <= to); });
+        if (tab === 'current') rows.sort((a, b) => a.st.remaining - b.st.remaining || (a.d.detentionDate || '').localeCompare(b.d.detentionDate || ''));
+        else rows.sort((a, b) => (a.d[T.dateKey] || '').localeCompare(b.d[T.dateKey] || ''));
+        return rows;
+    }
+
+    function reportColumns(tab) {
+        const common = [
+            { t: 'م', w: 5, v: (x, i) => i + 1 },
+            { t: 'رقم التوقيف', w: 10, v: x => x.d.number, ltr: true },
+            { t: 'الاسم', w: 20, v: x => x.d.name, strong: true, right: true },
+            { t: 'مكان العمل', w: 13, v: x => x.d.workplace || '-', right: true },
+            { t: 'المخالفة', w: 13, v: x => x.d.violation || '-', right: true },
+            { t: 'تاريخ التوقيف', w: 10, v: x => fmtD(x.d.detentionDate) }
+        ];
+        if (tab === 'current') return common.concat([
+            { t: 'المدة المسموحة', w: 8, v: x => x.st.total + ' يوم' },
+            { t: 'الوضع', w: 11, v: x => x.st.remaining < 0 ? `تجاوز ${-x.st.remaining} يوم` : x.st.remaining === 0 ? 'تنتهي اليوم' : `متبقٍّ ${x.st.remaining} يوم`, cls: x => x.st.overdue ? 'bad' : x.st.near ? 'warn' : '' },
+            { t: 'الجهة الآمرة', w: 10, v: x => x.d.orderingAuthority || '-', right: true }
+        ]);
+        if (tab === 'referred') return common.concat([
+            { t: 'تاريخ الإحالة', w: 10, v: x => fmtD(x.d.referralDate) },
+            { t: 'أُحيل إلى', w: 13, v: x => x.d.referredTo || '-', right: true },
+            { t: 'مدة التوقيف', w: 6, v: x => L.daysBetween(x.d.detentionDate, x.d.referralDate) + ' يوم' }
+        ]);
+        return common.concat([
+            { t: 'تاريخ الإخلاء', w: 11, v: x => fmtD(x.d.releaseDate) },
+            { t: 'مدة التوقيف الفعلية', w: 9, v: x => L.daysBetween(x.d.detentionDate, x.d.releaseDate) + ' يوم' },
+            { t: 'الجهة الآمرة', w: 9, v: x => x.d.orderingAuthority || '-', right: true }
+        ]);
+    }
+
+    function reportKpis(tab, rows) {
+        const n = rows.length;
+        if (tab === 'current') {
+            const over = rows.filter(x => x.st.overdue).length, near = rows.filter(x => x.st.near).length;
+            return [[n, 'موقوف حالياً'], [over, 'تجاوزوا المدة'], [near, 'قريبو انتهاء المدة'], [n - over - near, 'ضمن المدة']];
+        }
+        const days = rows.map(x => L.daysBetween(x.d.detentionDate, tab === 'referred' ? x.d.referralDate : x.d.releaseDate));
+        const avg = n ? Math.round(days.reduce((a, b) => a + b, 0) / n) : 0;
+        if (tab === 'referred') {
+            const dest = new Set(rows.map(x => (x.d.referredTo || '').trim()).filter(Boolean)).size;
+            return [[n, 'موقوف أُحيل'], [dest, 'جهة محال إليها'], [avg, 'متوسط أيام التوقيف'], [n ? Math.max(...days) : 0, 'أطول مدة توقيف']];
+        }
+        return [[n, 'موقوف أُخلي سبيله'], [avg, 'متوسط أيام التوقيف'], [n ? Math.min(...days) : 0, 'أقصر مدة'], [n ? Math.max(...days) : 0, 'أطول مدة']];
+    }
+
+    function reportPages(tab, from, to) {
+        const T = REP_TABS.find(t => t.k === tab);
+        const rows = reportRows(tab, from, to);
+        const cols = reportColumns(tab);
+        const grid = `grid-template-columns:${cols.map(c => c.w + 'fr').join(' ')};`;
+        const period = !T.dated ? `حتى تاريخ ${fmtD(L.today())}`
+            : from && to ? `خلال الفترة من ${fmtD(from)} إلى ${fmtD(to)}` : from ? `منذ ${fmtD(from)}` : to ? `حتى ${fmtD(to)}` : 'كل الفترات';
+        const header = `<div class="rp-head"><div class="rp-logo">${BRAND.logo ? `<img src="${h(BRAND.logo)}" alt="">` : ''}<div><b>${h(BRAND.ministry)}</b><span>${h(BRAND.dept)}</span></div></div><div class="rp-date">${h(monthLabel(L.today()))}</div></div><div class="rp-gold"></div>`;
+        const thead = `<div class="rp-tr rp-th" style="${grid}">${cols.map(c => `<div>${h(c.t)}</div>`).join('')}</div>`;
+        const kp = reportKpis(tab, rows);
+        const top = `<div class="rp-badge">قسم المواقيف</div><h2 class="rp-title">${h(T.title)}</h2><div class="rp-sub">${h(period)} — ${h(cnt(rows.length, 'موقوف', 'موقوفين', 'موقوفاً'))}</div><div class="rp-bar"></div>
+            <div class="rp-kpis">${kp.map((k, i) => `<div class="rp-kpi${i === 0 ? ' dark' : ''}"><b>${k[0]}</b><span>${h(k[1])}</span></div>`).join('')}</div>`;
+        // توزيع الصفوف على الصفحات حسب الطول التقديري لكل صف
+        const lines = x => Math.max(...cols.map((c, ci) => Math.ceil(String(c.v(x, 0)).length * 5.4 / Math.max(20, 714 * c.w / 100 - 10))));
+        const chunks = [];
+        let cur = [], used = 0;
+        rows.forEach((x, i) => {
+            const hgt = 12 + 15 * lines(x);
+            if (cur.length && used + hgt > (chunks.length ? 860 : 660)) { chunks.push(cur); cur = []; used = 0; }
+            cur.push(i); used += hgt;
+        });
+        if (cur.length || !chunks.length) chunks.push(cur);
+        const total = chunks.length;
+        return { count: rows.length, html: chunks.map((ids, p) => `<section class="rp">${header}
+            <div class="rp-body">${p === 0 ? top : `<div class="rp-cont">${h(T.title)} — تتمة</div>`}
+            <div class="rp-table">${thead}${ids.length ? ids.map(i => { const x = rows[i]; return `<div class="rp-tr${i % 2 ? '' : ' alt'}" style="${grid}">${cols.map(c => `<div class="${c.right ? 'r' : ''}${c.strong ? ' s' : ''}${c.cls ? ' ' + c.cls(x) : ''}"${c.ltr ? ' dir="ltr"' : ''}>${h(String(c.v(x, i)))}</div>`).join('')}</div>`; }).join('')
+                : '<div class="rp-none">لا توجد سجلات في هذا التقرير.</div>'}</div></div>
+            <div class="rp-foot"><div class="rp-gold"></div><div class="rp-foot-in"><span>قسم المواقيف — ${h(BRAND.dept)}</span><b>${p + 1} / ${total}</b></div></div></section>`).join('') };
+    }
+
+    function viewReports(query) {
+        const tab = REP_TABS.some(t => t.k === query.tab) ? query.tab : 'current';
+        const T = REP_TABS.find(t => t.k === tab);
+        const today = L.today();
+        const from = query.from != null ? query.from : today.slice(0, 8) + '01';
+        const to = query.to != null ? query.to : today;
+        const link = (o) => '#/reports?' + Object.entries(Object.assign({ tab, from, to }, o)).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+        const chips = REP_TABS.map(t => `<a class="chip${t.k === tab ? ' active' : ''}" href="${link({ tab: t.k })}">${t.t}<span class="n">${reportRows(t.k, t.dated ? from : '', t.dated ? to : '').length}</span></a>`).join('');
+        const rep = reportPages(tab, T.dated ? from : '', T.dated ? to : '');
+        const filters = T.dated ? `<div class="card rp-filter"><div class="grid2">
+                <div class="field"><label for="rp_from">من تاريخ</label><input id="rp_from" type="date" value="${h(from)}"></div>
+                <div class="field"><label for="rp_to">إلى تاريخ</label><input id="rp_to" type="date" value="${h(to)}"></div></div>
+                <div class="btn-row"><a class="btn small ghost" href="${link({ from: today.slice(0, 8) + '01', to: today })}">هذا الشهر</a><a class="btn small ghost" href="${link({ from: '', to: '' })}">كل الفترات</a></div></div>` : '';
+        shell(`<div class="rp-controls"><div class="chips">${chips}</div>${filters}
+            <div class="btn-row" style="margin-bottom:12px"><button class="btn" id="rp_print">⬇ تصدير PDF / طباعة</button></div>
+            <div class="hint" style="font-size:.78rem;color:var(--muted);margin-bottom:10px">في نافذة الطباعة اختر «حفظ كملف PDF». ${rep.count ? '' : 'التقرير فارغ حالياً.'}</div></div>
+            <div class="rp-wrap"><div class="rp-scale" id="rp_scale">${rep.html}</div></div>`, { nav: 'reports', title: 'التقارير', sub: BRAND.dept });
+        const fit = () => { const s = document.getElementById('rp_scale'); if (s) s.style.zoom = Math.min(1, s.parentElement.clientWidth / 794); };
+        fit();
+        window.onresize = fit;
+        const fEl = document.getElementById('rp_from'), tEl = document.getElementById('rp_to');
+        if (fEl) [fEl, tEl].forEach(el => el.addEventListener('change', () => go(link({ from: fEl.value, to: tEl.value }))));
+        document.getElementById('rp_print').addEventListener('click', () => {
+            const old = document.title;
+            document.title = `${T.title} - ${T.dated ? (from || 'كل') + ' - ' + (to || 'الفترات') : today}`;
+            window.print();
+            setTimeout(() => { document.title = old; }, 1500);
+        });
+    }
+
     /* ================= التوجيه ================= */
     function route() {
         if (S.locked) return;
@@ -993,6 +1127,7 @@
         if (parts[0] === 'list') return viewList(query);
         if (parts[0] === 'new') return viewForm(null);
         if (parts[0] === 'backup') return viewBackup();
+        if (parts[0] === 'reports') return viewReports(query);
         if (parts[0] === 'd' && parts[1]) {
             const id = +parts[1];
             return parts[2] === 'edit' ? viewForm(id) : viewDetail(id);
@@ -1022,7 +1157,15 @@
             return;
         }
         if (S.pin) showLock(); else route();
+        // حماية البيانات من الحذف التلقائي عند امتلاء ذاكرة الهاتف
+        if (navigator.storage && navigator.storage.persisted) {
+            navigator.storage.persisted().then(p => { if (!p) Storage.requestPersistence(); }).catch(() => {});
+        }
         if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+            // عند وصول نسخة جديدة من التطبيق: إعادة تحميل الصفحة مرة واحدة لتظهر فوراً
+            let reloaded = false;
+            const hadController = !!navigator.serviceWorker.controller;
+            navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
             navigator.serviceWorker.register('sw.js').catch(() => { /* اختياري */ });
         }
     })();

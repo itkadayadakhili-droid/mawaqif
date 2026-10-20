@@ -1,22 +1,22 @@
 // عامل الخدمة: يخزّن هيكل التطبيق (HTML/CSS/JS/خطوط/أيقونات) ليعمل بلا إنترنت بعد أول فتح.
 // البيانات نفسها تُحفظ في IndexedDB على الهاتف ولا علاقة لها بهذا الملف.
 // عند تعديل أي ملف من الملفات أدناه: غيّر رقم VERSION حتى تتحدّث النسخة المخزّنة عند المستخدمين.
-const VERSION = 'mawaqif-v4';
+const VERSION = 'mawaqif-v9';
 const FILES = [
     './', 'index.html', 'manifest.json',
-    'css/app.css', 'js/storage.js', 'js/logic.js', 'js/app.js',
+    'css/app.css', 'js/brand.js', 'js/violations.js', 'js/storage.js', 'js/logic.js', 'js/app.js',
     'assets/brand/dpd-shield.png', 'assets/brand/dpd-emblem-white.png',
     'assets/fonts/itfQomraArabic-Regular.otf', 'assets/fonts/itfQomraArabic-Medium.otf', 'assets/fonts/itfQomraArabic-Bold.otf', 'assets/fonts/itfQomraArabic-Black.otf',
     'assets/icons/icon-192.png', 'assets/icons/icon-512.png', 'assets/icons/maskable-512.png'
 ];
 
 self.addEventListener('install', e => {
-    e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+    e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
     e.waitUntil(
-        caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+        caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('mawaqif-v') && k !== VERSION).map(k => caches.delete(k))))
             .then(() => self.clients.claim())
     );
 });
